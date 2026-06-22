@@ -16,3 +16,7 @@ Thumbs.db
 *.log
 *.tmp
 *~
+
+# Données locales
+Analyse qualitative/
+sauvegarde/
