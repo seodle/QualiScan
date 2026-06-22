@@ -1,0 +1,74 @@
+% ─────────────────────────────────────────────────────────────────────────────
+% Style LaTeX — Rapports d'analyse qualitative
+% xelatex via rmarkdown
+% ─────────────────────────────────────────────────────────────────────────────
+
+% ── Police (Palatino, disponible partout) ─────────────────────────────────────
+\usepackage{palatino}
+
+% ── Couleurs ─────────────────────────────────────────────────────────────────
+\usepackage{xcolor}
+\definecolor{primary}{HTML}{1a3a5c}
+\definecolor{accent}{HTML}{2563eb}
+\definecolor{muted}{HTML}{6b7280}
+\definecolor{tablealt}{HTML}{eef4ff}
+
+% ── En-têtes / pieds de page ─────────────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\small\color{muted}--- \thepage\ ---}
+\renewcommand{\headrulewidth}{0pt}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[C]{\small\color{muted}--- \thepage\ ---}%
+  \renewcommand{\headrulewidth}{0pt}%
+}
+
+% ── Hiérarchie des titres ─────────────────────────────────────────────────────
+\usepackage{titlesec}
+
+% \section  = Groupe (EVACOM · CT) ─ très visible, règle épaisse
+\titleformat{\section}
+  {\Large\bfseries\color{primary}}
+  {}
+  {0em}
+  {}
+  [{\color{primary}\vspace{3pt}\rule{\linewidth}{2.5pt}}]
+\titlespacing*{\section}{0pt}{0pt}{14pt}
+
+% \subsection = Enseignant ─ bleu marine + trait accentué
+\titleformat{\subsection}
+  {\large\bfseries\color{primary}}
+  {}
+  {0em}
+  {}
+  [{\color{accent}\vspace{2pt}\rule{\linewidth}{1.2pt}}]
+\titlespacing*{\subsection}{0pt}{20pt}{10pt}
+
+% \subsubsection = Section du contenu (Remarques, Critères, Améliorations)
+\titleformat{\subsubsection}
+  {\normalsize\bfseries\itshape\color{muted}}
+  {}
+  {0em}
+  {}
+\titlespacing*{\subsubsection}{0pt}{14pt}{4pt}
+
+% ── Tableaux ─────────────────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{colortbl}
+\renewcommand{\arraystretch}{2.0}
+\setlength{\tabcolsep}{8pt}
+\rowcolors{2}{tablealt}{white}
+\setlength{\LTpre}{6pt}
+\setlength{\LTpost}{10pt}
+
+% ── Espacements ───────────────────────────────────────────────────────────────
+\usepackage{parskip}
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+
+% ── Typographie fine ─────────────────────────────────────────────────────────
+\usepackage{microtype}
