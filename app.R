@@ -284,6 +284,53 @@ call_infomaniak_api <- function(img_list, api_key, product_id, model_name,
   stop("Réponse API vide ou inattendue.")
 }
 
+#' Normalise l'Unicode (NFD → NFC) pour éviter les doublons de discipline
+#' Ex. macOS : "Mathe\u0301matiques" vs "Math\u00e9matiques"
+normalize_unicode <- function(x) {
+  if (length(x) == 0 || is.na(x)[1]) return("")
+  x <- trimws(as.character(x)[1])
+  if (!nzchar(x)) return("")
+  if (requireNamespace("stringi", quietly = TRUE)) {
+    return(stringi::stri_trans_nfc(x))
+  }
+  x <- gsub("e\\x{0301}", "\u00e9", x, perl = TRUE)
+  x <- gsub("E\\x{0301}", "\u00c9", x, perl = TRUE)
+  x <- gsub("e\\x{0300}", "\u00e8", x, perl = TRUE)
+  x <- gsub("E\\x{0300}", "\u00c8", x, perl = TRUE)
+  x <- gsub("a\\x{0300}", "\u00e0", x, perl = TRUE)
+  x <- gsub("A\\x{0300}", "\u00c0", x, perl = TRUE)
+  x <- gsub("a\\x{0302}", "\u00e2", x, perl = TRUE)
+  x <- gsub("A\\x{0302}", "\u00c2", x, perl = TRUE)
+  x <- gsub("u\\x{0300}", "\u00f9", x, perl = TRUE)
+  x <- gsub("U\\x{0300}", "\u00d9", x, perl = TRUE)
+  x <- gsub("u\\x{0302}", "\u00fb", x, perl = TRUE)
+  x <- gsub("U\\x{0302}", "\u00db", x, perl = TRUE)
+  x <- gsub("i\\x{0302}", "\u00ee", x, perl = TRUE)
+  x <- gsub("I\\x{0302}", "\u00ce", x, perl = TRUE)
+  x <- gsub("o\\x{0302}", "\u00f4", x, perl = TRUE)
+  x <- gsub("O\\x{0302}", "\u00d4", x, perl = TRUE)
+  x <- gsub("c\\x{0327}", "\u00e7", x, perl = TRUE)
+  x <- gsub("C\\x{0327}", "\u00c7", x, perl = TRUE)
+  x
+}
+
+normalize_teacher_entry <- function(entry) {
+  fields <- c("teacher_name", "discipline", "type_epreuve", "section", "etablissement")
+  old_disc <- entry$discipline %||% ""
+  for (f in fields) {
+    if (!is.null(entry[[f]])) entry[[f]] <- normalize_unicode(entry[[f]])
+  }
+  needs_rebuild <- !identical(old_disc, entry$discipline) ||
+    (!is.null(entry$full_md) && grepl("<[0-9a-f]{2}>", entry$full_md, ignore.case = TRUE))
+  if (needs_rebuild && !is.null(entry$raw_content)) {
+    entry$full_md <- build_teacher_markdown(
+      entry$teacher_name, entry$discipline, entry$type_epreuve,
+      entry$section, entry$etablissement, entry$raw_content
+    )
+  }
+  entry
+}
+
 #' Extrait les métadonnées depuis le nom du fichier PDF
 #' Format attendu : NOM_Prénom_TYPE_Discipline_Section_Etablissement.pdf
 parse_pdf_filename <- function(filename) {
@@ -311,12 +358,36 @@ parse_pdf_filename <- function(filename) {
   list(
     nom           = nom,
     prenom        = prenom,
-    teacher_name  = paste(trimws(nom), trimws(prenom)),
-    type_epreuve  = type_epreuve,
-    discipline    = discipline,
-    section       = section,
-    etablissement = etablissement
+    teacher_name  = normalize_unicode(paste(trimws(nom), trimws(prenom))),
+    type_epreuve  = normalize_unicode(type_epreuve),
+    discipline    = normalize_unicode(discipline),
+    section       = normalize_unicode(section),
+    etablissement = normalize_unicode(etablissement)
   )
+}
+
+#' Répare les séquences <c3><a9> etc. qui masquent les accents en HTML
+repair_markdown_text <- function(text) {
+  if (is.null(text) || !nzchar(text)) return(text)
+  if (!grepl("<[0-9a-f]{2}>", text, ignore.case = TRUE)) return(text)
+
+  decode_run <- function(run) {
+    hex <- regmatches(run, gregexpr("[0-9a-f]{2}", run, ignore.case = TRUE))[[1]]
+    if (length(hex) == 0) return(run)
+    tryCatch(rawToChar(as.raw(strtoi(hex, base = 16L))), error = function(e) run)
+  }
+
+  repeat {
+    m <- regexpr("(?:<[0-9a-f]{2}>)+", text, ignore.case = TRUE, perl = TRUE)
+    if (m[1] == -1) break
+    run     <- regmatches(text, m)
+    decoded <- decode_run(run)
+    text    <- paste0(
+      substr(text, 1, m - 1), decoded,
+      substr(text, m + attr(m, "match.length"), nchar(text))
+    )
+  }
+  text
 }
 
 #' Formate le bloc Markdown final pour un enseignant
@@ -324,16 +395,16 @@ build_teacher_markdown <- function(teacher_name, discipline, type_epreuve,
                                    section, etablissement, result) {
   meta_lines <- c(
     if (nzchar(discipline))    paste0("**Discipline :** ",     discipline),
-    if (nzchar(type_epreuve))  paste0("**Type d'épreuve :** ", type_epreuve),
+    if (nzchar(type_epreuve))  paste0("**Type d\u00e9preuve :** ", type_epreuve),
     if (nzchar(section))       paste0("**Section :** ",        section),
-    if (nzchar(etablissement)) paste0("**Établissement :** ",  etablissement)
+    if (nzchar(etablissement)) paste0("**\u00c9tablissement :** ",  etablissement)
   )
   meta_block <- if (length(meta_lines) > 0) paste(meta_lines, collapse = "  \n") else ""
 
   paste0(
-    "# Extraction — ", teacher_name, "\n\n",
+    "# Extraction \u2014 ", teacher_name, "\n\n",
     if (nzchar(meta_block)) paste0(meta_block, "\n\n") else "",
-    "_Généré le ", format(Sys.time(), "%d/%m/%Y à %H:%M:%S"), "_\n\n",
+    "_g\u00e9n\u00e9r\u00e9 le ", format(Sys.time(), "%d/%m/%Y \u00e0 %H:%M:%S"), "_\n\n",
     "---\n\n",
     result
   )
@@ -404,6 +475,7 @@ generate_rmd_report <- function(all_results,
     "output:\n",
     "  pdf_document:\n",
     "    latex_engine: xelatex\n",
+    "    highlight: null\n",
     "    toc: false\n",
     "    number_sections: false\n",
     "    keep_tex: false\n",
@@ -748,12 +820,22 @@ server <- function(input, output, session) {
     rv$current_md   <- NULL
     disable("process_btn")
 
-    teacher       <- trimws(input$teacher_name)
-    discipline    <- trimws(input$discipline)
-    type_epreuve  <- trimws(input$type_epreuve)
-    section       <- trimws(input$section)
-    etablissement <- trimws(input$etablissement)
-    pdf_path      <- input$pdf_file$datapath
+    # Priorité au nom de fichier pour éviter les métadonnées obsolètes de la session
+    info <- parse_pdf_filename(input$pdf_file$name)
+    if (nzchar(info$type_epreuve)) {
+      teacher       <- info$teacher_name
+      discipline    <- info$discipline
+      type_epreuve  <- info$type_epreuve
+      section       <- info$section
+      etablissement <- info$etablissement
+    } else {
+      teacher       <- normalize_unicode(input$teacher_name)
+      discipline    <- normalize_unicode(input$discipline)
+      type_epreuve  <- normalize_unicode(input$type_epreuve)
+      section       <- normalize_unicode(input$section)
+      etablissement <- normalize_unicode(input$etablissement)
+    }
+    pdf_path <- input$pdf_file$datapath
 
     meta_str <- paste(Filter(nzchar, c(discipline, type_epreuve, section, etablissement)), collapse = " · ")
     add_log(paste0("=== Début traitement : ", teacher, " ==="))
@@ -917,7 +999,7 @@ server <- function(input, output, session) {
       )
     } else {
       md_html <- markdown::markdownToHTML(
-        text          = rv$current_md,
+        text          = repair_markdown_text(rv$current_md),
         fragment.only = TRUE,
         options       = c("use_xhtml", "smartypants", "tables")
       )
@@ -1344,7 +1426,7 @@ server <- function(input, output, session) {
     n_replaced <- length(intersect(names(loaded), names(rv$all_results)))
 
     for (key in names(loaded)) {
-      rv$all_results[[key]] <- loaded[[key]]
+      rv$all_results[[key]] <- normalize_teacher_entry(loaded[[key]])
     }
 
     msg <- paste0(

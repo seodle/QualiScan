@@ -3,8 +3,18 @@
 % xelatex via rmarkdown
 % ─────────────────────────────────────────────────────────────────────────────
 
-% ── Police (Palatino, disponible partout) ─────────────────────────────────────
-\usepackage{palatino}
+% ── Police Unicode (xelatex + fontspec) ───────────────────────────────────────
+\usepackage{fontspec}
+\IfFontExistsTF{TeX Gyre Pagella}{
+  \setmainfont{TeX Gyre Pagella}[
+    UprightFont    = *-regular,
+    BoldFont       = *-bold,
+    ItalicFont     = *-italic,
+    BoldItalicFont = *-bolditalic
+  ]
+}{
+  \setmainfont{Palatino}
+}
 
 % ── Couleurs ─────────────────────────────────────────────────────────────────
 \usepackage{xcolor}
